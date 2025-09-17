@@ -1,9 +1,49 @@
 # Joachim Knudsen s072446
 
 import xml.etree.ElementTree as ET
-import petrinet
+
 from datetime import datetime
-from unittest import skipIf
+
+class PetriNet():
+
+    def __init__(self):
+        self.places = {}
+        self.transistion = {}
+        self.edgeTS = {}
+        self.edgeST = {}
+    def add_place(self, name):
+        self.places[name] = 0
+        return self
+    def add_transition(self, name, id):
+        self.transistion[name] = id
+        return self
+    def transition_name_to_id(self, name):
+        return self.transistion[name]
+    def add_edge(self, source, target):
+        self.edgeTS.setdefault(target, []).append(source)
+        self.edgeST.setdefault(source, []).append(target)
+        return self
+    def get_tokens(self, place):
+        return self.places[place]
+
+    def is_enabled(self, transition):
+        result = self.edgeTS.setdefault(transition,[])
+        for i in result:
+            if self.places[i] ==0:
+                return False
+        return True
+
+    def add_marking(self, place):
+        self.places[place] = self.places[place] + 1
+
+    def fire_transition(self, transition):
+        if self.is_enabled(transition):
+            for i in self.edgeTS[transition]:
+                self.places[i] = self.places[i] - 1
+            for i in self.edgeST[transition]:
+                self.places[i] = self.places[i] + 1
+            return True
+        return False
 
 
 def log_as_dictionary(fileString):
@@ -60,13 +100,16 @@ def dependency_graph_file(file):
             dg[file[case][t]["concept:name"]][file[case][t+1]["concept:name"]] = 1+dg[file[case][t]["concept:name"]].setdefault(file[case][t+1]["concept:name"],0)
     return dg
 def alpha(log):
+    ti = []
+    to = []
+    for l in log:
+        if log[l][0]["concept:name"] not in ti:
+            ti.append(log[l][0]["concept:name"])
+        if log[l][len(log[l])-1]["concept:name"] not in to:
+            to.append(log[l][len(log[l])-1]["concept:name"])
     Xw_list = []
     Tw_list = []
     matrix = {}
-    # for case in log:
-    #     for t in range(len(log[case])-1):
-    #         Tw_list.setdefault(log[case][t]["concept:name"],{})
-    #         Tw_list[log[case][t]["concept:name"]][log[case][t+1]["concept:name"]] = 1+Tw_list[log[case][t]["concept:name"]].setdefault(log[case][t+1]["concept:name"],0)
     file =dependency_graph_file(log)
     for i in file:
         if i not in Tw_list:
@@ -87,8 +130,6 @@ def alpha(log):
                 matrix[i][j] ="||"
                 matrix[j][i] ="||"
     for i in matrix:
-        print(matrix[i])
-    for i in matrix:
         listAppend =[]
         for j in matrix[i]:
             if matrix[i][j] =="-->":
@@ -107,29 +148,82 @@ def alpha(log):
                 if count == len(j):
                     Xw_list.append([[i],j])
                     break
-    net = petrinet.PetriNet()
-    place = ["start","end"]
-    # edgeTS = {"start":["record issue"]}
-    # edgeST = {"end": ["issue completion"]}
+    for i in matrix:
+        listAppend =[]
+        for j in matrix[i]:
+            if matrix[i][j] =="<--":
+                listAppend.append(j)
+                Xw_list.append([[j],[i]])
+        comb =   combs(listAppend)
+        for j in comb:
+            if len(j)<2:
+                continue
+            count=1
+            for t in j:
+                if matrix[t][j[count]] != "#":
+                    break
+                count += 1
+                if count == len(j):
+                    Xw_list.append([j,[i]])
+                    break
+    net = PetriNet()
+    cn =  0
+    while(len(Xw_list)>cn):
+        for j in range(cn+1,len(Xw_list)):
+            if i==j:
+                continue
+            if  Xw_list[cn] == Xw_list[j]:
+                Xw_list.remove(Xw_list[j])
+                break
+        cn +=1
+    cn =  0
+    y_log = []
+    while(len(Xw_list)>cn):
+        noCandidate = True
+        for j in range(cn+1,len(Xw_list)):
+            if len(Xw_list[cn][0]) >0:
+                parrentX = False
+                for val in Xw_list[cn][0]:
+                    if val in (Xw_list[j][0]) and (Xw_list[cn][1][0] in (Xw_list[j][1]) ):
+                        parrentX = True
+                    else:
+                        parrentX = False
+                        break
+            if len(Xw_list[cn][1]) >0:
+                parrentY = False
+                for val in Xw_list[cn][1]:
+                    if val in (Xw_list[j][1]) and (Xw_list[cn][0][0] in (Xw_list[j][0]) ):
+                        parrentY = True
+                    else:
+                        parrentY = False
+                        break
+            if parrentY ==True and parrentX ==True:
+                noCandidate = False
+        if noCandidate:
+            y_log.append(Xw_list[cn])
+        cn +=1
     count =-1
-    for n in matrix:
+    Xw_list = y_log
 
+    for n in matrix:
         net.add_transition(n,count)
         count -=1
     count =1
+    net.add_place(0)
+    net.add_place(99999)
+    for starts in ti:
+        net.add_edge(0,net.transition_name_to_id(starts))
+    for ends in to:
+        net.add_edge(net.transition_name_to_id(ends),99999)
     for x in Xw_list:
         for w in x[0]:
-
             net.add_place(count)
             net.add_edge(net.transition_name_to_id(w),count)
-            print([net.transition_name_to_id(w),count])
         for w in x[1]:
-
             net.add_place(count)
             net.add_edge(count,net.transition_name_to_id(w))
-            print([count,net.transition_name_to_id(w)])
         count +=1
-    net.add_marking(1)
+    net.add_marking(0)
     return net
 def combs(a):
     if len(a) == 0:
@@ -138,21 +232,22 @@ def combs(a):
     for c in combs(a[1:]):
         cs += [c, c+[a[0]]]
     return cs
-alpha(read_from_file("extension-log.xes"))
 
-mined_model = alpha(read_from_file("extension-log.xes"))
+# mined_model = alpha(read_from_file("extension-log-3.xes"))
+#
+# def check_enabled(pn):
+#     ts = ["record issue", "inspection", "intervention authorization", "action not required", "work mandate", "no concession", "work completion", "issue completion"]
+#     for t in ts:
+#         print (pn.is_enabled(pn.transition_name_to_id(t)))
+#     print("")
+# #
+# #
+# trace = ["record issue", "inspection", "intervention authorization", "work mandate", "work completion", "issue completion"]
+# for a in trace:
+#     check_enabled(mined_model)
+#     mined_model.fire_transition(mined_model.transition_name_to_id(a))
+#
 
-def check_enabled(pn):
-    ts = ["record issue", "inspection", "intervention authorization", "action not required", "work mandate", "no concession", "work completion", "issue completion"]
-    for t in ts:
-        print (pn.is_enabled(pn.transition_name_to_id(t)))
-    print("")
-#
-#
-trace = ["record issue", "inspection", "intervention authorization", "work mandate", "work completion", "issue completion"]
-for a in trace:
-    check_enabled(mined_model)
-    mined_model.fire_transition(mined_model.transition_name_to_id(a))
 
 
 # log = read_from_file("extension-log.xes")
