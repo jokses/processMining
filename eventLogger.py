@@ -11,8 +11,12 @@ class PetriNet():
         self.transistion = {}
         self.edgeTS = {}
         self.edgeST = {}
+        self.missingTokens = {}
+        self.consumedTokens = 0
+        self.producedTokens = 0
     def add_place(self, name):
         self.places[name] = 0
+        self.missingTokens[name] = 0
         return self
     def add_transition(self, name, id):
         self.transistion[name] = id
@@ -35,15 +39,43 @@ class PetriNet():
 
     def add_marking(self, place):
         self.places[place] = self.places[place] + 1
-
+        self.producedTokens +=1
     def fire_transition(self, transition):
+
         if self.is_enabled(transition):
             for i in self.edgeTS[transition]:
                 self.places[i] = self.places[i] - 1
-            for i in self.edgeST[transition]:
-                self.places[i] = self.places[i] + 1
-            return True
-        return False
+                self.consumedTokens +=1
+        else:
+            for i in self.edgeTS[transition]:
+                self.missingTokens[self.places[i]] +=1
+                self.consumedTokens +=1
+        for i in self.edgeST[transition]:
+            self.places[i] = self.places[i] + 1
+            self.producedTokens +=1
+
+    def remainingToken(self):
+
+        return sum(self.places.values())-1
+
+    def missingToken(self):
+        return sum(self.missingTokens.values())
+    def consumedToken(self):
+        return self.consumedTokens
+
+    def producedToken(self):
+        return self.producedTokens
+    def done(self):
+
+        self.consumedTokens +=1
+
+    def reInit(self):
+        self.places = self.places.fromkeys(self.places,0)
+        self.missingTokens = self.missingTokens.fromkeys(self.missingTokens,0)
+        self.consumedTokens = 0
+        self.producedTokens = 0
+        self.add_marking(0)
+
 
 
 def log_as_dictionary(fileString):
@@ -168,43 +200,47 @@ def alpha(log):
                     break
     net = PetriNet()
     cn =  0
-    while(len(Xw_list)>cn):
+    while(len(Xw_list)>=cn):
         for j in range(cn+1,len(Xw_list)):
-            if i==j:
-                continue
             if  Xw_list[cn] == Xw_list[j]:
-                Xw_list.remove(Xw_list[j])
+                Xw_list.remove(Xw_list[cn])
+                cn -=  1
+                break
+            if j == len(Xw_list)-1:
                 break
         cn +=1
-    cn =  0
     y_log = []
+    cn = 0
     while(len(Xw_list)>cn):
         noCandidate = True
-        for j in range(cn+1,len(Xw_list)):
-            if len(Xw_list[cn][0]) >0:
-                parrentX = False
+        for j in range(0,len(Xw_list)):
+            parrentX = False
+            if len(Xw_list[j][0]) >len(Xw_list[cn][0]):
+
                 for val in Xw_list[cn][0]:
                     if val in (Xw_list[j][0]) and (Xw_list[cn][1][0] in (Xw_list[j][1]) ):
                         parrentX = True
                     else:
                         parrentX = False
-                        break
-            if len(Xw_list[cn][1]) >0:
-                parrentY = False
+
+            parrentY = False
+
+            if len(Xw_list[j][1]) > len(Xw_list[cn][1]):
                 for val in Xw_list[cn][1]:
+
                     if val in (Xw_list[j][1]) and (Xw_list[cn][0][0] in (Xw_list[j][0]) ):
                         parrentY = True
                     else:
                         parrentY = False
-                        break
-            if parrentY ==True and parrentX ==True:
+
+            if parrentY ==True or parrentX ==True:
+
                 noCandidate = False
         if noCandidate:
             y_log.append(Xw_list[cn])
         cn +=1
     count =-1
     Xw_list = y_log
-
     for n in matrix:
         net.add_transition(n,count)
         count -=1
@@ -233,20 +269,72 @@ def combs(a):
         cs += [c, c+[a[0]]]
     return cs
 
-# mined_model = alpha(read_from_file("extension-log-3.xes"))
+def fitness_token_replay(file, net):
+    # log
+    dg ={}
+    sum_m = 0
+    sum_r = 0
+    sum_c = 0
+    sum_p = 0
+    for case in file:
+        list = []
+        for t in range(len(file[case])):
+            net.fire_transition(net.transition_name_to_id(file[case][t]["concept:name"]))
+            list.append(file[case][t]["concept:name"])
+        net.done()
+        print(list)
+        print(f"m: {net.missingToken()}, r: {net.remainingToken()}, c: {net.consumedToken()}, p: {net.producedToken()}")
+
+        sum_m += net.missingToken()
+        sum_r += net.remainingToken()
+        sum_c += net.consumedToken()
+        sum_p += net.producedToken()
+        net.reInit()
+    print(sum_m)
+    print(sum_r)
+    print(sum_c)
+    print(sum_p)
+    result =0.5*(1-sum_m/sum_c)+0.5*(1-sum_r/sum_p)
+    return result
+
+
+log = read_from_file("extension-log-4.xes")
+log_noisy = read_from_file("extension-log-noisy-4.xes")
+# print(log)
+mined_model = alpha(log)
+print(round(fitness_token_replay(log, mined_model), 5))
+print(round(fitness_token_replay(log_noisy, mined_model), 5))
+
+
+# mined_model = alpha(read_from_file("extension-log-4.xes"))
 #
 # def check_enabled(pn):
 #     ts = ["record issue", "inspection", "intervention authorization", "action not required", "work mandate", "no concession", "work completion", "issue completion"]
 #     for t in ts:
+#         # print(t)
 #         print (pn.is_enabled(pn.transition_name_to_id(t)))
+#
 #     print("")
 # #
-# #
+# #issue completion"/>"action not required"/> inspection"/>record issue
 # trace = ["record issue", "inspection", "intervention authorization", "work mandate", "work completion", "issue completion"]
+#
 # for a in trace:
 #     check_enabled(mined_model)
 #     mined_model.fire_transition(mined_model.transition_name_to_id(a))
+# mined_model.done()
+# m = mined_model.missingToken()
+# r = mined_model.remainingToken()
+# c = mined_model.consumedToken()
+# p = mined_model.producedToken()
+# result =1- 0.5*(m/c)-0.5*(r/p)
+# print (m )
+# print (r )
+# print (c )
+# print (p )
+# print (result)
 #
+
 
 
 
