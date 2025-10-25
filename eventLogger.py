@@ -55,19 +55,20 @@ class PetriNet():
             self.producedTokens +=1
 
     def remainingToken(self):
-
-        return sum(self.places.values())-1
-
+        return sum(self.places.values())
     def missingToken(self):
         return sum(self.missingTokens.values())
     def consumedToken(self):
         return self.consumedTokens
-
     def producedToken(self):
         return self.producedTokens
     def done(self):
-
-        self.consumedTokens +=1
+        if(self.places[99999] ==0):
+            self.missingTokens[self.places[99999]] +=1
+            self.consumedTokens +=1
+        else:
+            self.places[99999] -=1
+            self.consumedTokens +=1
 
     def reInit(self):
         self.places = self.places.fromkeys(self.places,0)
@@ -282,29 +283,29 @@ def fitness_token_replay(file, net):
             net.fire_transition(net.transition_name_to_id(file[case][t]["concept:name"]))
             list.append(file[case][t]["concept:name"])
         net.done()
-        print(list)
-        print(f"m: {net.missingToken()}, r: {net.remainingToken()}, c: {net.consumedToken()}, p: {net.producedToken()}")
+        # print(list)
+        # print(f"m: {net.missingToken()}, r: {net.remainingToken()}, c: {net.consumedToken()}, p: {net.producedToken()}")
 
         sum_m += net.missingToken()
         sum_r += net.remainingToken()
         sum_c += net.consumedToken()
         sum_p += net.producedToken()
         net.reInit()
-    print(sum_m)
-    print(sum_r)
-    print(sum_c)
-    print(sum_p)
+    # print(sum_m)
+    # print(sum_r)
+    # print(sum_c)
+    # print(sum_p)
     result =0.5*(1-sum_m/sum_c)+0.5*(1-sum_r/sum_p)
     return result
 
 
-log = read_from_file("extension-log-4.xes")
-log_noisy = read_from_file("extension-log-noisy-4.xes")
-# print(log)
-mined_model = alpha(log)
-print(round(fitness_token_replay(log, mined_model), 5))
-print(round(fitness_token_replay(log_noisy, mined_model), 5))
-
+# log = read_from_file("extension-log-4.xes")
+# log_noisy = read_from_file("extension-log-noisy-4.xes")
+# # print(log)
+# mined_model = alpha(log)
+# print(round(fitness_token_replay(log, mined_model), 5))
+# print(round(fitness_token_replay(log_noisy, mined_model), 5))
+#
 
 # mined_model = alpha(read_from_file("extension-log-4.xes"))
 #
